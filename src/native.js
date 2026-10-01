@@ -92,6 +92,8 @@ function photoBlobUrl(path) {
     const generation = photoGeneration;
     const load = (async () => {
       const res = await apiFetch(path);
+      // A photo answered 401 with the token still in use means the session is over, exactly as for any API call
+      if (endedSession(res) && window.YU && window.YU.api && window.YU.api.onSessionLost) window.YU.api.onSessionLost();
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const url = URL.createObjectURL(await res.blob());
       if (generation !== photoGeneration) { URL.revokeObjectURL(url); throw new Error('signed out while loading'); }

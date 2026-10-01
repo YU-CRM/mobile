@@ -2,6 +2,6 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@mipmap/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
-    <!-- Android 13+ themed icons tint this: the white sparkle on transparent is already a mask -->
-    <monochrome android:drawable="@mipmap/ic_launcher_foreground"/>
+    <!-- Android 13+ themed icons tint this single-colour mask of the mark -->
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>
 </adaptive-icon>
