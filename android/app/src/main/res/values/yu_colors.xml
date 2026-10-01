@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The page ground: the union blue in src/styles/tokens.css -->
+    <color name="yu_ground">#3D66F5</color>
+</resources>

@@ -1,0 +1,18 @@
+{
+  "appId": "uz.inha.youthunion",
+  "appName": "Youth Union",
+  "webDir": "www",
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchFadeOutDuration": 200,
+      "backgroundColor": "#3D66F5",
+      "showSpinner": false
+    }
+  }
+}

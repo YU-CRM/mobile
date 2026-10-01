@@ -1,0 +1,19 @@
+/* What makes the page feel like an app rather than a website in a frame: no grey flash on tap,
+   no long-press preview on links and photos, and no rubber-band overscroll showing the WebView
+   behind the page. Text in fields stays selectable. */
+html { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+a, img { -webkit-touch-callout: none; }
+
+/* The strip under the status bar: in a phone browser its toolbar covers it, the app draws there.
+   Once the page scrolls, the strip takes the topbar's frosted ground so text never runs under
+   the clock. It sits just below the topbar, which already covers it on the signed-in screens. */
+body::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); z-index: 29;
+  background: var(--topbar-bg); backdrop-filter: blur(14px) saturate(1.2);
+  opacity: 0; transition: opacity var(--dur) var(--ease); pointer-events: none;
+}
+html.has-scrolled body::before { opacity: 1; }
+
+/* The app resizes for the keyboard, so the floating tab bar would sit on top of it; it steps
+   aside while a text field has focus (src/native.js sets .is-typing). */
+html.is-typing .tabbar { display: none; }
