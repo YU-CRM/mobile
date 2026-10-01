@@ -7,13 +7,23 @@ screen and stays signed in, like any app, until the person signs out.
 Written for whoever builds and releases the app. The server needs no extra configuration for
 it: the same deployment serves the website and the app.
 
+The app is one of three repositories:
+
+| Repository | What it holds |
+|---|---|
+| **mobile** (this one) | The native shell: Capacitor config, the Android and iOS projects, the glue in `src/`. |
+| [frontend](https://github.com/YU-CRM/frontend) | The screens, styles and translations. Checked out here at `frontend/` as a git submodule. Private. |
+| [backend](https://github.com/YU-CRM/backend) | The server the app talks to. Private. |
+
+Building the app needs read access to the frontend repository.
+
 ---
 
 ## How it fits together
 
 | | Website | App |
 |---|---|---|
-| Front end | `dist/`, served by the server | a copy of `dist/` inside the app (`mobile/www`) |
+| Front end | `frontend/dist/`, served by the server | a copy of `frontend/dist/` inside the app (`www/`) |
 | Talks to | its own origin | the server address baked in at build time (`YU_API_ORIGIN`) |
 | Signed in by | HttpOnly cookie | a session token in the Keychain (iOS) or the Keystore-backed store (Android), sent as `Authorization: Bearer` |
 
@@ -21,7 +31,7 @@ A WebView does not reliably keep cookies for a server on another origin (iOS tre
 third-party), so the app holds its token itself. The server accepts a bearer token **only**
 from the app's two fixed origins, `capacitor://localhost` (iOS) and `https://localhost`
 (Android), and gives only those origins CORS access. The website's cookie and CSRF rules are
-unchanged. See `server/src/http/native-app.ts`.
+unchanged. See `server/src/http/native-app.ts` in the backend repository.
 
 A new session reaches the app in the `X-YU-Session` response header. `src/native.js` stores it
 and attaches it to every request (`YUNative.fetch`). The page's own script never sees the token,
@@ -35,11 +45,11 @@ website it does not exist and every hook is a no-op. What `src/native.js` adds:
   Tapping a photo opens it full size.
 - **Android Back** closes the open menu, modal or drawer, then steps back, and leaves the app from Home or sign-in.
 - **External links** open in the in-app browser.
-- **System bars**: the page draws edge to edge, and the CSS pads for the status bar and home indicator (`--safe-*` in `src/styles/tokens.css`).
+- **System bars**: the page draws edge to edge, and the CSS pads for the status bar and home indicator (`--safe-*` in `frontend/src/styles/tokens.css`).
 - **Tab bar** hides while the keyboard is up.
 
 Dropdowns open as a bottom sheet in the app's own design rather than the system list. That is
-`src/js/picker.js`, shared with the website at phone width, so the app and the mobile website match.
+`frontend/src/js/picker.js`, shared with the website at phone width, so the app and the mobile website match.
 
 ---
 
@@ -51,16 +61,19 @@ Needs **Node 24+**, plus:
 - **iOS:** a Mac with Xcode. iOS 15 is the minimum. Dependencies come through Swift Package Manager; there is no CocoaPods step.
 
 ```bash
-npm install            # in the repository root: the website build and its fonts/icons
+git clone --recurse-submodules https://github.com/YU-CRM/mobile.git
 cd mobile
 npm install
+npm run frontend:install   # the front end's own dependencies (fonts, icons), in frontend/
 ```
+
+If `frontend/` is empty, run `git submodule update --init`.
 
 ---
 
 ## Running it against a local server
 
-Start the server as usual (`npm run dev` in the root, port 3000), then:
+Start the server as usual (`npm run dev` in the backend repository, port 3000), then:
 
 ```bash
 npm run build:dev               # web build pointed at http://localhost:3000, synced into both native projects
@@ -128,10 +141,12 @@ Capabilities, select *Any iOS Device*, then *Product → Archive → Distribute 
 
 ## Day to day
 
-- **The app carries its own copy of the front end.** A change to `src/` reaches app users only with
-  a new app release (`npm run build`, then steps 2 to 4). Older app versions stay installed for a
+- **The app carries its own copy of the front end**, pinned to one commit of the frontend
+  repository. A front-end change reaches app users only with a new app release: move the
+  submodule forward (`cd frontend && git pull origin main`, then commit `frontend` here), run
+  `npm run build`, then steps 2 to 4. Older app versions stay installed for a
   while, so keep server API changes backward compatible.
 - **After changing `capacitor.config.json` or adding a plugin**, run `npx cap sync`.
 - **Icons and splash screens** are drawn by `scripts/icons.mjs` from the sparkle in
-  `src/favicon.svg`. Run `npm run icons` after `npx cap add`, or when the mark changes.
+  `frontend/src/favicon.svg`. Run `npm run icons` after `npx cap add`, or when the mark changes.
 - `www/`, `android/app/src/main/assets/public` and `ios/App/App/public` are build output and are not committed.

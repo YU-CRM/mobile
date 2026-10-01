@@ -1,0 +1,8 @@
+# Keep LF everywhere so builds and shell scripts behave the same on macOS, Linux and Windows
+* text=auto eol=lf
+*.png binary
+*.webp binary
+*.woff2 binary
+# Windows batch files (android/gradlew.bat) need CRLF: cmd mis-parses labels in LF files
+*.bat text eol=crlf
+*.jar binary

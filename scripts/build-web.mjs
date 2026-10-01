@@ -1,6 +1,6 @@
 // Builds the front end for the iOS and Android app into mobile/www.
 //
-// The app ships the website's own build (../build.mjs → ../dist), unchanged, plus:
+// The app ships the website's own build (frontend/build.mjs → frontend/dist), unchanged, plus:
 //   assets/native.<hash>.js   — Capacitor and src/native.js, bundled by esbuild, with the server address baked in
 //   assets/native.<hash>.css  — src/native.css
 //   a Content-Security-Policy meta tag that allows exactly that server (the website gets its CSP as a header)
@@ -17,8 +17,9 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..');
-const repo = join(mobile, '..');
-const dist = join(repo, 'dist');
+// The front end is the YU-CRM/frontend repository, checked out here as a submodule
+const frontend = join(mobile, 'frontend');
+const dist = join(frontend, 'dist');
 const www = join(mobile, 'www');
 const DEV_ORIGIN = 'http://localhost:3000';
 // Plain http is only ever acceptable for a server on the developer's own machine
@@ -41,9 +42,11 @@ function apiOrigin() {
 }
 
 function buildWebsite() {
-  const run = spawnSync(process.execPath, ['build.mjs'], { cwd: repo, stdio: 'inherit' });
-  if (run.status !== 0) fail('the website build (../build.mjs) failed; run `npm install` in the repository root first');
-  if (!existsSync(join(dist, 'index.html'))) fail('../dist/index.html is missing after the website build');
+  if (!existsSync(join(frontend, 'build.mjs'))) fail('frontend/ is empty; run `git submodule update --init`');
+  if (!existsSync(join(frontend, 'node_modules'))) fail('the front end has no dependencies yet; run `npm run frontend:install`');
+  const run = spawnSync(process.execPath, ['build.mjs'], { cwd: frontend, stdio: 'inherit' });
+  if (run.status !== 0) fail('the website build (frontend/build.mjs) failed');
+  if (!existsSync(join(dist, 'index.html'))) fail('frontend/dist/index.html is missing after the website build');
 }
 
 async function bundleNative(origin) {

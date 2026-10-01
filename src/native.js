@@ -2,7 +2,7 @@
 
    scripts/build-web.mjs bundles this file (with Capacitor) into www/assets/native.<hash>.js and
    loads it before the app bundle, so window.YUNative exists before the first request. The web
-   code meets the app only through window.YUNative (src/js/api.js, ui.js, state.js, news.js);
+   code meets the app only through window.YUNative (frontend/src/js/api.js, ui.js, state.js, news.js);
    everything else here works on the page from the outside: the Android back button, links that
    leave the app, report photos that need the session, and the splash screen.
 
@@ -184,7 +184,7 @@ window.addEventListener('scroll', () => {
 
 // ---- While the keyboard is up, the floating tab bar would ride on top of it (the app resizes for the
 // keyboard, a phone browser does not): native.css hides it while a text field has focus.
-// (A select opens the picker sheet, not the keyboard: src/js/picker.js.)
+// (A select opens the picker sheet, not the keyboard: frontend/src/js/picker.js.)
 const TYPING_FIELD = 'textarea, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"])';
 document.addEventListener('focusin', (e) => {
   if (e.target.matches && e.target.matches(TYPING_FIELD)) document.documentElement.classList.add('is-typing');

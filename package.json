@@ -18,9 +18,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "sharp": "^0.35.4"
   },
   "scripts": {
+    "frontend:install": "npm --prefix frontend ci",
     "build": "node scripts/build-web.mjs && cap sync",
     "build:dev": "node scripts/build-web.mjs --dev && cap sync",
     "icons": "node scripts/icons.mjs",

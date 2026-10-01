@@ -1,24 +1,21 @@
 // Draws the app icon and splash screens for Android and iOS from the website's own mark: the white
-// four-point sparkle of src/favicon.svg (the ✦ of the "youth union ✦" logo) on the union blue,
-// with the same soft glow as the app's background (src/styles/layout.css, body).
+// four-point sparkle of frontend/src/favicon.svg (the ✦ of the "youth union ✦" logo) on the union blue,
+// with the same soft glow as the app's background (frontend/src/styles/layout.css, body).
 //
 // Every image Capacitor generated is replaced at its own size, so the script follows whatever
 // densities the native projects contain. Run it after `npx cap add`, and again if the mark changes:
 //   node scripts/icons.mjs
-//
-// Uses sharp from the repository root's node_modules (the server already depends on it).
-import { createRequire } from 'node:module';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sharp = createRequire(join(mobile, '..', 'package.json'))('sharp');
 
 const BLUE = '#3D66F5';
 const BLUE_LIGHT = '#6C8CFF';
 const BLUE_DEEP = '#2B4BD8';
-// The sparkle from src/favicon.svg, drawn in a 64-unit box centred on (32, 32), 32 units across
+// The sparkle from frontend/src/favicon.svg, drawn in a 64-unit box centred on (32, 32), 32 units across
 const SPARKLE = 'M32 12c1.6 9.6 6.4 14.4 16 16-9.6 1.6-14.4 6.4-16 16-1.6-9.6-6.4-14.4-16-16 9.6-1.6 14.4-6.4 16-16z';
 
 const ground = (w, h) => `
