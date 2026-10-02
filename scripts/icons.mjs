@@ -1,22 +1,22 @@
-// Draws the app icon and splash screens for Android and iOS from the website's own mark: the white
-// four-point sparkle of frontend/src/favicon.svg (the ✦ of the "youth union ✦" logo) on the union blue,
-// with the same soft glow as the app's background (frontend/src/styles/layout.css, body).
+// Draws the app icon and splash screens for Android and iOS from the website's own mark: three people
+// around a star (frontend/scripts/brand-mark.mjs, the front end checked out as a submodule), white with a pale teal star on the union
+// blue, with the same soft glow as the app's background (frontend/src/styles/layout.css, body).
 //
 // Every image Capacitor generated is replaced at its own size, so the script follows whatever
 // densities the native projects contain. Run it after `npx cap add`, and again if the mark changes:
 //   node scripts/icons.mjs
+//
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import sharp from 'sharp';
 
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..');
+const { PALETTES, markAt } = await import(pathToFileURL(join(mobile, 'frontend', 'scripts', 'brand-mark.mjs')).href);
 
 const BLUE = '#3D66F5';
 const BLUE_LIGHT = '#6C8CFF';
 const BLUE_DEEP = '#2B4BD8';
-// The sparkle from frontend/src/favicon.svg, drawn in a 64-unit box centred on (32, 32), 32 units across
-const SPARKLE = 'M32 12c1.6 9.6 6.4 14.4 16 16-9.6 1.6-14.4 6.4-16 16-1.6-9.6-6.4-14.4-16-16 9.6-1.6 14.4-6.4 16-16z';
 
 const ground = (w, h) => `
   <defs>
@@ -24,26 +24,26 @@ const ground = (w, h) => `
     <radialGradient id="g2" cx="100%" cy="100%" r="70%"><stop offset="0" stop-color="${BLUE_DEEP}"/><stop offset="1" stop-color="${BLUE_DEEP}" stop-opacity="0"/></radialGradient>
   </defs>
   <rect width="${w}" height="${h}" fill="${BLUE}"/><rect width="${w}" height="${h}" fill="url(#g1)"/><rect width="${w}" height="${h}" fill="url(#g2)"/>`;
-// The sparkle centred in a w×h canvas, `span` pixels across
-const sparkle = (w, h, span) => {
-  const k = span / 32;
-  return `<path d="${SPARKLE}" fill="#fff" transform="translate(${w / 2 - 32 * k} ${h / 2 - 32 * k}) scale(${k})"/>`;
-};
+// The mark centred in a w×h canvas, `span` pixels across
+const sparkle = (w, h, span) => markAt(w, h, span, PALETTES.blue);
+// Android 13+ themed icons want a single-colour mask of the mark
+const mono = (w, h, span) => markAt(w, h, span, { people: '#fff', star: '#fff' });
 const svg = (w, h, body, clip = '') => Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${clip ? `<clipPath id="c">${clip}</clipPath><g clip-path="url(#c)">${body}</g>` : body}</svg>`);
 
 const DRAW = {
-  // Full icon for app stores and pre-Android-8 launchers: ground and sparkle (half the width, as in the favicon)
-  icon: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.5)),
+  // Full icon for app stores and pre-Android-8 launchers: ground and mark (seven tenths of the width)
+  icon: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.7)),
   // Legacy launchers get the shape drawn in; adaptive ones (Android 8+) mask the layers themselves
-  legacy: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.5), `<rect width="${w}" height="${h}" rx="${w * 0.22}"/>`),
-  round: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.5), `<circle cx="${w / 2}" cy="${h / 2}" r="${w / 2}"/>`),
-  // Adaptive layers are 108dp with a 66dp safe zone: the sparkle stays well inside it
-  foreground: (w, h) => svg(w, h, sparkle(w, h, w * 0.36)),
+  legacy: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.7), `<rect width="${w}" height="${h}" rx="${w * 0.22}"/>`),
+  round: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, w * 0.66), `<circle cx="${w / 2}" cy="${h / 2}" r="${w / 2}"/>`),
+  // Adaptive layers are 108dp with a 66dp safe zone: the mark stays well inside it
+  foreground: (w, h) => svg(w, h, sparkle(w, h, w * 0.5)),
+  monochrome: (w, h) => svg(w, h, mono(w, h, w * 0.5)),
   background: (w, h) => svg(w, h, ground(w, h)),
-  splash: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, Math.min(w, h) * 0.16)),
+  splash: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, Math.min(w, h) * 0.24)),
   // iOS letterboxes the splash with aspect-fill, so the mark is sized against the long side
-  splashIos: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, Math.max(w, h) * 0.12)),
+  splashIos: (w, h) => svg(w, h, ground(w, h) + sparkle(w, h, Math.max(w, h) * 0.17)),
 };
 
 async function redraw(file, kind, { opaque = false } = {}) {
@@ -69,18 +69,19 @@ for (const file of walk(androidRes)) {
   const name = file.split(/[\\/]/).pop();
   if (ANDROID_KIND[name]) done.push(await redraw(file, ANDROID_KIND[name]));
 }
-// The adaptive icon's background layer: one PNG per density, next to each foreground
+// The adaptive icon's background and monochrome layers: one PNG per density, next to each foreground
 for (const file of walk(androidRes).filter((f) => f.endsWith('ic_launcher_foreground.png'))) {
   const { width, height } = await sharp(file).metadata();
   writeFileSync(file.replace('ic_launcher_foreground.png', 'ic_launcher_background.png'), await sharp(DRAW.background(width, height)).png().toBuffer());
-  done.push(`background ${width}×${height}`);
+  writeFileSync(file.replace('ic_launcher_foreground.png', 'ic_launcher_monochrome.png'), await sharp(DRAW.monochrome(width, height)).png().toBuffer());
+  done.push(`background+monochrome ${width}×${height}`);
 }
 const ADAPTIVE = `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@mipmap/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
-    <!-- Android 13+ themed icons tint this: the white sparkle on transparent is already a mask -->
-    <monochrome android:drawable="@mipmap/ic_launcher_foreground"/>
+    <!-- Android 13+ themed icons tint this single-colour mask of the mark -->
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>
 </adaptive-icon>
 `;
 for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) writeFileSync(join(androidRes, 'mipmap-anydpi-v26', name), ADAPTIVE);
