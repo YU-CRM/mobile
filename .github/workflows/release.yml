@@ -1,0 +1,147 @@
+name: Build store-ready apps
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mobile-store-build-prod
+  cancel-in-progress: false
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  android:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: prod
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Read pinned frontend commit
+        id: frontend
+        run: |
+          sha=$(git ls-tree HEAD frontend | awk '$1 == "160000" {print $3}')
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || { echo 'Pinned frontend submodule is missing'; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: YU-CRM/frontend
+          ref: ${{ steps.frontend.outputs.sha }}
+          path: frontend
+          token: ${{ secrets.FRONTEND_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - name: Prepare signed Android release
+        env:
+          YU_API_ORIGIN: ${{ vars.YU_API_ORIGIN }}
+          ANDROID_VERSION_CODE_OFFSET: ${{ vars.ANDROID_VERSION_CODE_OFFSET || '0' }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [[ -n "${!key}" ]] || { echo "Missing $key"; exit 1; }
+          done
+          node -e "if(new URL(process.env.YU_API_ORIGIN).protocol!=='https:')throw Error('Release requires HTTPS')"
+          [[ "$ANDROID_VERSION_CODE_OFFSET" =~ ^[0-9]{1,9}$ ]] || exit 1
+          export ANDROID_VERSION_CODE=$((10#$ANDROID_VERSION_CODE_OFFSET + GITHUB_RUN_NUMBER))
+          ANDROID_VERSION_NAME=$(node -p "require('./package.json').version")
+          export ANDROID_VERSION_NAME
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/youth-union-upload.jks"
+          trap 'rm -f -- "$ANDROID_KEYSTORE_FILE"' EXIT
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
+          npm ci --no-audit --no-fund
+          npm --prefix frontend ci --no-audit --no-fund
+          npm --prefix frontend run check
+          node scripts/build-web.mjs
+          npx --no-install cap sync android
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          chmod +x android/gradlew
+          (cd android && ./gradlew --no-daemon assembleRelease bundleRelease)
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
+      - name: Keep signed native outputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+
+  ios:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    environment: prod
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Read pinned frontend commit
+        id: frontend
+        run: |
+          sha=$(git ls-tree HEAD frontend | awk '$1 == "160000" {print $3}')
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || { echo 'Pinned frontend submodule is missing'; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: YU-CRM/frontend
+          ref: ${{ steps.frontend.outputs.sha }}
+          path: frontend
+          token: ${{ secrets.FRONTEND_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Build and sync iOS web assets
+        env:
+          YU_API_ORIGIN: ${{ vars.YU_API_ORIGIN }}
+        run: |
+          node -e "if(new URL(process.env.YU_API_ORIGIN).protocol!=='https:')throw Error('Release requires HTTPS')"
+          npm ci --no-audit --no-fund
+          npm --prefix frontend ci --no-audit --no-fund
+          npm --prefix frontend run check
+          node scripts/build-web.mjs
+          npx --no-install cap sync ios
+      - name: Sign archive and export App Store Connect IPA
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_BUILD_NUMBER_OFFSET: ${{ vars.IOS_BUILD_NUMBER_OFFSET || '0' }}
+          IOS_XCODE_VERSION: ${{ vars.IOS_XCODE_VERSION || '26.6' }}
+        run: bash scripts/build-ios.sh
+      - name: Keep signed iOS output and debug symbols
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/ios/export/App.ipa
+            release/ios/App.xcarchive/dSYMs/

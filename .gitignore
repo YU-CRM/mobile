@@ -1,5 +1,6 @@
 node_modules/
 www/
+release/
 
 # Signing keys and local settings never belong in this public repository
 *.jks

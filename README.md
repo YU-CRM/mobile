@@ -1,5 +1,10 @@
 # Youth Union — iOS and Android app
 
+Production CI and the `prod` environment settings are documented in
+[CI.md](CI.md). This repo builds signed Android APK/AAB and iOS IPA artifacts for
+Google Play and App Store Connect. Mobile has no Docker image, GHCR cleanup,
+infra writer token or VPS deployment. Store upload and review are separate steps.
+
 The phone app is the website's own front end, the same screens as the website's mobile layout,
 running in a native shell ([Capacitor 8](https://capacitorjs.com)). It opens on the sign-in
 screen and stays signed in, like any app, until the person signs out.

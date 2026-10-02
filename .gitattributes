@@ -6,3 +6,5 @@
 # Windows batch files (android/gradlew.bat) need CRLF: cmd mis-parses labels in LF files
 *.bat text eol=crlf
 *.jar binary
+
+*.sh text eol=lf
