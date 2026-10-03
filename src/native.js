@@ -77,7 +77,11 @@ async function hasSession() {
   return !!token;
 }
 
-window.YUNative = Object.freeze({ apiOrigin: API_ORIGIN, fetch: apiFetch, endedSession, forgetSession, hasSession });
+// ---- This build's own version (name as shown, build = the Android version code), for the update check
+// and for the download page, which says which version is installed
+const appInfo = App.getInfo().then((i) => ({ version: i.version, build: i.build })).catch((err) => { report('app info not available', err); return null; });
+
+window.YUNative = Object.freeze({ apiOrigin: API_ORIGIN, fetch: apiFetch, endedSession, forgetSession, hasSession, appInfo: () => appInfo });
 
 // ---- Report photos: an <img> cannot send the token, so they are fetched and shown as blobs.
 // Only same-server /api/ paths are ever fetched, so the token never leaves for another origin.
@@ -198,6 +202,69 @@ document.addEventListener('focusout', () => {
     if (!(el && el.matches && el.matches(TYPING_FIELD))) document.documentElement.classList.remove('is-typing');
   }, 0);
 });
+
+// ---- Updates. The app asks the server for the newest published build when it starts and whenever it
+// comes back to the foreground, and offers it once the server's version code is above this build's.
+// A build outside a store cannot replace itself: "Update" hands the APK to the system browser, and
+// Android installs it over this one (same package, same signing key), keeping the saved session.
+// "Later" keeps quiet about that version for a day.
+const UPDATE_SNOOZE_KEY = 'yu.updateSnoozed';
+const UPDATE_SNOOZE_MS = 24 * 3600 * 1000;
+const UPDATE_PATH = '/api/app/android';
+let updateOffered = false;
+
+function snoozed(release) {
+  try {
+    const s = JSON.parse(localStorage.getItem(UPDATE_SNOOZE_KEY) || 'null');
+    return !!s && s.code === release.versionCode && Date.now() - s.at < UPDATE_SNOOZE_MS;
+  } catch { return false; }
+}
+function offerUpdate(release, info) {
+  const YU = window.YU;
+  const { esc } = YU.ui;
+  updateOffered = true;
+  const el = YU.ui.modal.open({
+    title: YU.t('app.update.title', { version: release.versionName }),
+    sub: YU.t('app.update.sub', { current: info.version }),
+    body: `<p class="muted-2">${YU.t('app.update.text')}</p>${release.notes ? `<p class="small mt-12">${esc(release.notes)}</p>` : ''}`,
+    foot: `<button class="btn btn-secondary" data-update="later">${YU.t('app.update.later')}</button><button class="btn btn-primary" data-update="now">${YU.t('app.update.now')}</button>`,
+    onClose: () => { updateOffered = false; },
+  });
+  if (!el) { updateOffered = false; return; }
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-update]');
+    if (!b) return;
+    if (b.dataset.update === 'now') Browser.open({ url: `${API_ORIGIN}${release.url}` }).catch((err) => report('could not open the download', err));
+    else localStorage.setItem(UPDATE_SNOOZE_KEY, JSON.stringify({ code: release.versionCode, at: Date.now() }));
+    YU.ui.modal.close();
+  });
+}
+async function checkForUpdate() {
+  const YU = window.YU;
+  if (updateOffered || !YU || !YU.ui || !YU.ui.modal.isOpen) return;
+  const info = await appInfo;
+  if (!info) return;
+  let release;
+  try {
+    const res = await apiFetch(UPDATE_PATH);
+    if (!res.ok) return;
+    release = (await res.json()).release;
+  } catch {
+    return; // offline: the next launch or return to the foreground asks again
+  }
+  if (!release || !(release.versionCode > Number(info.build)) || snoozed(release)) return;
+  // Not over a dialog the person is in the middle of
+  if (YU.ui.modal.isOpen()) return;
+  offerUpdate(release, info);
+}
+// The dialog needs the page's own code and catalogue: wait until the first screen has drawn
+function whenPageDrawn(fn, tries = 80) {
+  const view = document.getElementById('view');
+  if (window.YU && window.YU.ui && window.YU.t && view && view.children.length) fn();
+  else if (tries > 0) setTimeout(() => whenPageDrawn(fn, tries - 1), 250);
+}
+document.addEventListener('DOMContentLoaded', () => whenPageDrawn(() => setTimeout(checkForUpdate, 1500)));
+App.addListener('appStateChange', ({ isActive }) => { if (isActive) whenPageDrawn(checkForUpdate); }).catch((err) => report('app state not available', err));
 
 // ---- The native splash hands over to the page once it has drawn its first frame. The page's own
 // boot splash is the same blue, so the handover does not flash.

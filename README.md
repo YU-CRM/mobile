@@ -110,10 +110,27 @@ YU_API_ORIGIN=https://yu.example.uz npm run build
 # PowerShell: $env:YU_API_ORIGIN = "https://yu.example.uz"; npm run build
 ```
 
-**2. Raise the version** before every store upload:
+**2. Raise the version** before every upload:
 
-- Android: `versionCode` (+1 each upload) and `versionName` in `android/app/build.gradle`.
+- Android: `android/app/build.gradle` reads `ANDROID_VERSION_CODE` (+1 each build that goes out;
+  default 1) and `ANDROID_VERSION_NAME` (default 1.0) from the environment of the Gradle build.
 - iOS: Version and Build in Xcode, under the App target's General tab.
+
+### Publishing an Android build without a store
+
+The site has a download page at `#/app` (linked from the sign-in screen and from Settings), and
+the admin panel has a *Mobile app* section where an admin uploads the APK. The server reads the
+version code, version name and package from the APK's own manifest, keeps the file under the
+uploads volume (`app/<id>.apk`) and serves the newest build at `/api/app/android/download`;
+`/api/app/android` tells anyone which version that is. A build is refused unless its version code
+is above the published one and its package is the same.
+
+The app checks `/api/app/android` on launch and whenever it returns to the foreground
+(`src/native.js`). When the server's version code is above its own, it offers the update; *Update*
+opens the download in the phone's browser and Android installs the file over the installed app,
+keeping the saved session, provided the signing key is the same. *Later* keeps quiet about that
+version for a day. A debug-signed build therefore updates only other debug-signed builds, and a
+release-signed one only release-signed ones: pick one key and keep it.
 
 **3. Android: sign and build an App Bundle for Google Play.** Create the upload key once and keep
 it, and its passwords, somewhere safe. Losing it means asking Google to reset the upload key.
