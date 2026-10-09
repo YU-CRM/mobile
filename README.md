@@ -170,10 +170,5 @@ Capabilities, select *Any iOS Device*, then *Product → Archive → Distribute 
   while, so keep server API changes backward compatible.
 - **After changing `capacitor.config.json` or adding a plugin**, run `npx cap sync`.
 - **Icons and splash screens** are drawn by `scripts/icons.mjs` from the sparkle in
-<<<<<<< ours
   `frontend/src/favicon.svg`. Run `npm run icons` after `npx cap add`, or when the mark changes.
-- `www/`, `android/app/src/main/assets/public` and `ios/App/App/public` are build output and are not committed.
-=======
-  `src/favicon.svg`. Run `npm run icons` after `npx cap add`, or when the mark changes.
-- `android/app/src/main/assets/public` and `ios/App/App/public` are build output and are not committed. `www/` is build output too, but the YU-CRM/mobile repository commits it, refreshed whenever the `frontend` pin moves, so its CI builds the app without reading the private frontend repository (see CI.md); in this monorepo it stays ignored.
->>>>>>> theirs
+- `android/app/src/main/assets/public` and `ios/App/App/public` are build output and are not committed. `www/` is build output too, but it is committed here, refreshed whenever the `frontend` pin moves, so CI builds the app without reading the private frontend repository (see CI.md).
