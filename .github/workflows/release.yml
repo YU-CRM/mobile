@@ -34,7 +34,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Check the committed web bundle
         run: |
           set -Eeuo pipefail
@@ -42,6 +41,8 @@ jobs:
           origin=$(grep -oh 'https\?://[A-Za-z0-9.:-]*' www/assets/native.*.js | sort -u | head -1)
           node -e "const u = new URL(process.argv[1]); if (u.protocol !== 'https:') throw Error('the bundle points at ' + u.origin + '; a release needs https')" "$origin"
           echo "Web bundle built for $origin"
+      # The runner image ships the Android SDK and its sdkmanager; the setup-android action is not used because
+      # it tries to install the retired 'tools' package and fails
       - name: Build the Android app
         id: build
         env:
@@ -58,7 +59,9 @@ jobs:
           export ANDROID_VERSION_NAME
           npm ci --no-audit --no-fund
           npx --no-install cap sync android
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' > /dev/null
           chmod +x android/gradlew
           signed=true
           for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
