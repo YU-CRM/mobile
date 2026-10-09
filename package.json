@@ -1,6 +1,6 @@
 {
   "name": "yu-crm-mobile",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Youth Union for iOS and Android: the YU CRM front end in a Capacitor shell",
   "type": "module",

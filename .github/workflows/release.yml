@@ -11,6 +11,11 @@ concurrency:
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml
+  # The app is built from the committed web bundle (www/: the website's own build plus the native bridge, with
+  # the server address baked in), so this job needs no access to the private frontend repository and no token.
+  # With the four signing secrets in the prod environment it produces the signed release APK and AAB; without
+  # them it still builds, as a testing APK signed with the runner's throwaway debug key, which installs on a
+  # fresh phone but never over a build signed with another key.
   android:
     needs: verify
     if: github.ref == 'refs/heads/main'
@@ -21,34 +26,25 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Read pinned frontend commit
-        id: frontend
-        run: |
-          sha=$(git ls-tree HEAD frontend | awk '$1 == "160000" {print $3}')
-          [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || { echo 'Pinned frontend submodule is missing'; exit 1; }
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: YU-CRM/frontend
-          ref: ${{ steps.frontend.outputs.sha }}
-          path: frontend
-          token: ${{ secrets.FRONTEND_READ_TOKEN }}
-          persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-      - name: Prepare signed Android release
+      - name: Check the committed web bundle
+        run: |
+          set -Eeuo pipefail
+          [[ -f www/index.html ]] || { echo 'www/ is missing: run YU_API_ORIGIN=https://<site> node scripts/build-web.mjs and commit www/'; exit 1; }
+          origin=$(grep -oh 'https\?://[A-Za-z0-9.:-]*' www/assets/native.*.js | sort -u | head -1)
+          node -e "const u = new URL(process.argv[1]); if (u.protocol !== 'https:') throw Error('the bundle points at ' + u.origin + '; a release needs https')" "$origin"
+          echo "Web bundle built for $origin"
+      - name: Build the Android app
+        id: build
         env:
-          YU_API_ORIGIN: ${{ vars.YU_API_ORIGIN }}
           ANDROID_VERSION_CODE_OFFSET: ${{ vars.ANDROID_VERSION_CODE_OFFSET || '0' }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -56,40 +52,46 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -Eeuo pipefail
-          for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            [[ -n "${!key}" ]] || { echo "Missing $key"; exit 1; }
-          done
-          node -e "if(new URL(process.env.YU_API_ORIGIN).protocol!=='https:')throw Error('Release requires HTTPS')"
           [[ "$ANDROID_VERSION_CODE_OFFSET" =~ ^[0-9]{1,9}$ ]] || exit 1
           export ANDROID_VERSION_CODE=$((10#$ANDROID_VERSION_CODE_OFFSET + GITHUB_RUN_NUMBER))
           ANDROID_VERSION_NAME=$(node -p "require('./package.json').version")
           export ANDROID_VERSION_NAME
-          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/youth-union-upload.jks"
-          trap 'rm -f -- "$ANDROID_KEYSTORE_FILE"' EXIT
-          umask 077
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
           npm ci --no-audit --no-fund
-          npm --prefix frontend ci --no-audit --no-fund
-          npm --prefix frontend run check
-          node scripts/build-web.mjs
           npx --no-install cap sync android
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
           chmod +x android/gradlew
-          (cd android && ./gradlew --no-daemon assembleRelease bundleRelease)
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
-      - name: Keep signed native outputs
+          signed=true
+          for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [[ -n "${!key}" ]] || signed=false
+          done
+          if [[ "$signed" == true ]]; then
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/youth-union-upload.jks"
+            trap 'rm -f -- "$ANDROID_KEYSTORE_FILE"' EXIT
+            umask 077
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
+            (cd android && ./gradlew --no-daemon assembleRelease bundleRelease)
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+            { echo 'path<<EOF'; echo 'android/app/build/outputs/apk/release/app-release.apk'; echo 'android/app/build/outputs/bundle/release/app-release.aab'; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+          else
+            echo '::warning::No Android signing keys in the prod environment: this is a testing build, signed with a throwaway debug key. Publish only builds signed with the key the installed app already has.'
+            (cd android && ./gradlew --no-daemon assembleDebug)
+            echo "kind=testing" >> "$GITHUB_OUTPUT"
+            echo "path=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Built version $ANDROID_VERSION_NAME ($ANDROID_VERSION_CODE)"
+      - name: Keep the native outputs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: android-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: android-${{ steps.build.outputs.kind }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 14
-          path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+          path: ${{ steps.build.outputs.path }}
 
+  # Apple signing material does not exist yet, so the iOS build runs only when started by hand
   ios:
     needs: verify
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     environment: prod
     timeout-minutes: 45
@@ -97,35 +99,19 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Read pinned frontend commit
-        id: frontend
-        run: |
-          sha=$(git ls-tree HEAD frontend | awk '$1 == "160000" {print $3}')
-          [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || { echo 'Pinned frontend submodule is missing'; exit 1; }
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: YU-CRM/frontend
-          ref: ${{ steps.frontend.outputs.sha }}
-          path: frontend
-          token: ${{ secrets.FRONTEND_READ_TOKEN }}
-          persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
-      - name: Build and sync iOS web assets
-        env:
-          YU_API_ORIGIN: ${{ vars.YU_API_ORIGIN }}
+      - name: Check the committed web bundle
         run: |
-          node -e "if(new URL(process.env.YU_API_ORIGIN).protocol!=='https:')throw Error('Release requires HTTPS')"
+          set -Eeuo pipefail
+          [[ -f www/index.html ]] || { echo 'www/ is missing: run YU_API_ORIGIN=https://<site> node scripts/build-web.mjs and commit www/'; exit 1; }
+          origin=$(grep -oh 'https\?://[A-Za-z0-9.:-]*' www/assets/native.*.js | sort -u | head -1)
+          node -e "const u = new URL(process.argv[1]); if (u.protocol !== 'https:') throw Error('the bundle points at ' + u.origin + '; a release needs https')" "$origin"
+      - name: Sync iOS web assets
+        run: |
           npm ci --no-audit --no-fund
-          npm --prefix frontend ci --no-audit --no-fund
-          npm --prefix frontend run check
-          node scripts/build-web.mjs
           npx --no-install cap sync ios
       - name: Sign archive and export App Store Connect IPA
         env:

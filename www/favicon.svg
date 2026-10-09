@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
+<style>
+.mark-people{stroke:#1CA3A3}.mark-head{fill:#1CA3A3}.mark-star{fill:#12275E}
+@media (prefers-color-scheme: dark){.mark-people{stroke:#5BC6C4}.mark-head{fill:#5BC6C4}.mark-star{fill:#F7F8F8}}
+</style>
+<path d="M95.76 88.66A96 96 0 0 1 224.24 88.66" fill="none" class="mark-people" stroke-width="34" stroke-linecap="round"/><ellipse cx="160" cy="58" rx="42" ry="24" transform="rotate(0 160 58)" class="mark-head"/><circle cx="160" cy="24" r="22" class="mark-head"/><path d="M253.9 140.04A96 96 0 0 1 189.67 251.3" fill="none" class="mark-people" stroke-width="34" stroke-linecap="round"/><ellipse cx="248.33" cy="211" rx="42" ry="24" transform="rotate(120 248.33 211)" class="mark-head"/><circle cx="277.78" cy="228" r="22" class="mark-head"/><path d="M130.33 251.3A96 96 0 0 1 66.1 140.04" fill="none" class="mark-people" stroke-width="34" stroke-linecap="round"/><ellipse cx="71.67" cy="211" rx="42" ry="24" transform="rotate(240 71.67 211)" class="mark-head"/><circle cx="42.22" cy="228" r="22" class="mark-head"/><path d="M160 110L171.76 143.82L207.55 144.55L179.02 166.18L189.39 200.45L160 180L130.61 200.45L140.98 166.18L112.45 144.55L148.24 143.82Z" class="mark-star"/>
+</svg>
